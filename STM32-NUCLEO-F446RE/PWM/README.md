@@ -97,13 +97,21 @@ When you compile C code, the compiler converts it to assembly first, then to mac
 
 When the STM32 chip **powers on**, it doesn't immediately run your `main()` function. Instead:
 
-1. **Chip wakes up** → CPU at memory address `0x08000000` (Flash start)
-2. **CPU needs to initialize things** → Stack, memory, etc.
-3. **Then call main()** → Your C code starts
+1. **Power is applied** → VDD/VDDA/VBAT receive power and the power/reset controller checks supply levels.
+2. **Reset is held** → the controller keeps the CPU in reset until power is stable and ready.
+3. **Reset is released** → the CPU reads flash base addresses at `0x08000000`.
+
+At reset, the first flash word is used as the initial stack pointer, and the second flash word is the address of the reset handler.
+
+**In simple terms:**
+- The startup assembly file tells the chip what to do immediately after reset is released
+- It makes the chip start at the correct code location
+- It sets up the stack so functions and variables work safely
+- It then calls `main()` so your C program can run
 
 **Without a startup file:**
-- The chip wakes up but doesn't know what to do
-- Stack isn't set up → variables crash
+- The chip may reach the correct address, but your program environment is not initialized
+- Stack and memory are not set up correctly → variables crash
 - main() doesn't get called → program doesn't run
 
 ### Our Startup File Explained
@@ -394,11 +402,15 @@ At power-on:
 When you power on the STM32:
 
 ```
-1. [HARDWARE] Chip wakes up
-              CPU jumps to 0x08000000 (Flash start)
+1. [HARDWARE] External power is applied
+              Power/reset controller checks VDD/VDDA/VBAT and holds reset until stable
+              When reset is released, CPU reads flash base at 0x08000000
+              - first word = initial SP
+              - second word = reset handler address
 
 2. [STARTUP.S] Reset_Handler runs
               - Sets stack pointer (sp = __StackTop)
+              - Copies .data to RAM and zeros .bss
               - Calls main()
 
 3. [MAIN.C] main() function starts
